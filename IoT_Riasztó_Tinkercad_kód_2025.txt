@@ -1,0 +1,140 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+const int sensorPin = A0;
+const int buttonPin = 2;
+const int buzzerPin = 8;
+const int redPin   = 9;
+const int greenPin = 10;
+const int bluePin  = 11;
+
+int lightLevel = 0;
+int threshold = 700;
+int baseLight = 0;
+
+int systemState = 0;
+int lastButtonState = LOW;
+unsigned long lastBlinkTime = 0;
+unsigned long lastScreenUpdate = 0;
+bool ledState = false;
+
+void setup() {
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(buttonPin, INPUT);
+
+  Serial.begin(9600);
+
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0,0);
+  lcd.print("BIZT. RENDSZER");
+  lcd.setCursor(0,1);
+  lcd.print("Kalibralas...");
+
+
+  long sum = 0;
+  for (int i = 0; i < 100; i++) {
+    int v = analogRead(sensorPin);
+    sum += v;
+    delay(10);
+  }
+  baseLight = sum / 100;
+  threshold = baseLight + 800;
+
+  Serial.print("Base: ");
+  Serial.println(baseLight);
+  Serial.print("Threshold: ");
+  Serial.println(threshold);
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Alap feny: ");
+  lcd.print(baseLight);
+  lcd.setCursor(0,1);
+  lcd.print("Kuszob: ");
+  lcd.print(threshold);
+  delay(1500);
+
+  lcd.clear();
+}
+
+void loop() {
+  lightLevel = analogRead(sensorPin);
+  // Serial.println(lightLevel);
+
+
+  int currentButtonState = digitalRead(buttonPin);
+  if (currentButtonState == HIGH && lastButtonState == LOW) {
+    if (systemState == 1) systemState = 2;
+    else if (systemState == 2) systemState = 0;
+    delay(300);
+    lcd.clear();
+  }
+  lastButtonState = currentButtonState;
+
+
+
+  // 0: FIGYEL (zold)
+  if (systemState == 0) {
+    setColor(0, 255, 0);
+    noTone(buzzerPin);
+
+    if (lightLevel > threshold) {
+      systemState = 1;
+      lcd.clear();
+    }
+
+    if (millis() - lastScreenUpdate > 200) {
+      lastScreenUpdate = millis();
+      lcd.setCursor(0,0);
+      lcd.print("STATUS: FIGYEL  ");
+      lcd.setCursor(0,1);
+      lcd.print("Fenyero: ");
+      lcd.print(lightLevel);
+      lcd.print("   ");
+    }
+  }
+
+  else if (systemState == 1) {
+    lcd.setCursor(0,0);
+    lcd.print("!!! RIASZTAS !!!");
+    lcd.setCursor(0,1);
+    lcd.print("BEHATOLAS!      ");
+
+    if (millis() - lastBlinkTime > 150) {
+      lastBlinkTime = millis();
+      ledState = !ledState;
+      if (ledState) {
+        setColor(255, 0, 0);
+        tone(buzzerPin, 1000);
+      } else {
+        setColor(0, 0, 0);
+        noTone(buzzerPin);
+      }
+    }
+  }
+
+  else if (systemState == 2) {
+    setColor(255, 0, 0);
+    noTone(buzzerPin);
+
+    lcd.setCursor(0,0);
+    lcd.print("STATUS: NEMITVA ");
+    lcd.setCursor(0,1);
+    lcd.print("Nyomj gombot!   ");
+  }
+
+  delay(10);
+}
+
+void setColor(int r, int g, int b) {
+  analogWrite(redPin,   r);
+  analogWrite(greenPin, g);
+  analogWrite(bluePin,  b);
+}
